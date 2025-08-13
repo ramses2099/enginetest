@@ -1,40 +1,124 @@
-import { DefaultLoader, Engine, ExcaliburGraphicsContext, Scene, SceneActivationContext } from "excalibur";
-import { Player } from "./player";
+import * as ex from 'excalibur'
+import { Bird } from './bird'
+import { Ground } from './ground'
+import { Pipe } from './pipe'
+import { Config } from './config'
+import { PipeFactory } from './pipe-factory'
+import { Resources } from './resources'
 
-export class MyLevel extends Scene {
-    override onInitialize(engine: Engine): void {
-        // Scene.onInitialize is where we recommend you perform the composition for your game
-        const player = new Player();
-        this.add(player); // Actors need to be added to a scene to be drawn
-    }
+export class Level extends ex.Scene {
+  random = new ex.Random()
+  pipeFactory = new PipeFactory(this, this.random, Config.PipeInterval);
+  bird: Bird = new Bird(this);
+  ground!: Ground
+  score: number = 0
+  best: number = 0
 
-    override onPreLoad(loader: DefaultLoader): void {
-        // Add any scene specific resources to load
-    }
+  scoreLabel = new ex.Label({
+    text: 'Score: 0',
+    x: 0,
+    y: 0,
+    z: 1,
+    font: new ex.Font({
+      size: 20,
+      color: ex.Color.White
+    })
+  })
 
-    override onActivate(context: SceneActivationContext<unknown>): void {
-        // Called when Excalibur transitions to this scene
-        // Only 1 scene is active at a time
-    }
+  bestLabel = new ex.Label({
+    text: 'Best: 0',
+    x: 400,
+    y: 0,
+    z: 1,
+    font: new ex.Font({
+      size: 20,
+      color: ex.Color.White,
+      textAlign: ex.TextAlign.End
+    })
+  })
 
-    override onDeactivate(context: SceneActivationContext): void {
-        // Called when Excalibur transitions away from this scene
-        // Only 1 scene is active at a time
-    }
+  startGameLabel = new ex.Label({
+    text: 'Tap to Start',
+    x: 200,
+    y: 200,
+    z: 2,
+    font: new ex.Font({
+      size: 30,
+      color: ex.Color.White,
+      textAlign: ex.TextAlign.Center
+    })
+  })
 
-    override onPreUpdate(engine: Engine, elapsedMs: number): void {
-        // Called before anything updates in the scene
-    }
+  override onActivate(context: ex.SceneActivationContext<unknown>): void {
+      Resources.BackgroundMusic.loop = true;
+      Resources.BackgroundMusic.play();
+  }
 
-    override onPostUpdate(engine: Engine, elapsedMs: number): void {
-        // Called after everything updates in the scene
-    }
+  override onInitialize (engine: ex.Engine): void {
+    //object
 
-    override onPreDraw(ctx: ExcaliburGraphicsContext, elapsedMs: number): void {
-        // Called before Excalibur draws to the screen
-    }
+    this.add(this.bird)
 
-    override onPostDraw(ctx: ExcaliburGraphicsContext, elapsedMs: number): void {
-        // Called after Excalibur draws to the screen
+    this.ground = new Ground(ex.vec(0, engine.screen.drawHeight - 64))
+    this.add(this.ground)
+
+    const topPipe = new Pipe(ex.vec(engine.screen.drawWidth, 150), 'bottom')
+    this.add(topPipe)
+
+    const bottomPipe = new Pipe(ex.vec(engine.screen.drawWidth, 300), 'bottom')
+    this.add(bottomPipe)
+
+    //this.pipeFactory.start()
+
+    this.add(this.scoreLabel)
+    this.add(this.bestLabel)
+
+    const bestScore = localStorage.getItem('bestScore')
+    if (bestScore) {
+      this.best = +bestScore
+      this.setBestScore(this.best)
+    } else {
+      this.setBestScore(0)
     }
+  }
+
+  showStartInstructions () {
+    this.startGameLabel.graphics.isVisible = true
+    this.engine.input.pointers.once('down', () => {
+        this.reset();
+
+        this.startGameLabel.graphics.isVisible = false;
+        this.bird.start()
+        this.pipeFactory.start()
+        this.ground.start()
+    })
+  }
+
+  incrementScore () {
+    this.scoreLabel.text = `Score: ${++this.score}`
+    this.setBestScore(this.score)
+  }
+
+  setBestScore (score: number) {
+    if (score > this.best) {
+      localStorage.setItem('bestScore', this.score.toString())
+      this.best = score
+    }
+    this.bestLabel.text = `Best: ${this.best}`
+  }
+
+  reset(){
+    this.bird.reset();
+    this.pipeFactory.reset();
+    this.score = 0;
+    this.scoreLabel.text = `Score: ${this.score}`;
+  }
+
+  triggerGameOver(){
+    this.pipeFactory.stop();
+    this.bird.stop();
+    this.ground.stop();
+    this.showStartInstructions();
+    Resources.FailSound.play();
+  }
 }
